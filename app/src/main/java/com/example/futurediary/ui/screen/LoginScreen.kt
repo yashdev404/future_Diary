@@ -6,8 +6,13 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import com.google.firebase.auth.FirebaseAuth
 
 @Composable
@@ -17,6 +22,25 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     val auth = FirebaseAuth.getInstance()
+    
+    val focusRequester = remember { FocusRequester() }
+
+    val performLogin = {
+        if (email.isNotBlank() && password.isNotBlank()) {
+            isLoading = true
+            auth.signInWithEmailAndPassword(email.trim(), password)
+                .addOnCompleteListener { task ->
+                    isLoading = false
+                    if (task.isSuccessful) {
+                        onLoginSuccess()
+                    } else {
+                        error = task.exception?.message
+                    }
+                }
+        } else {
+            error = "Please fill in all fields"
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -36,7 +60,11 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             },
             label = { Text("Email") },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+            enabled = !isLoading,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            keyboardActions = KeyboardActions(
+                onNext = { focusRequester.requestFocus() }
+            )
         )
         Spacer(modifier = Modifier.height(16.dp))
         
@@ -48,8 +76,14 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             },
             label = { Text("Password") },
             visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(focusRequester),
+            enabled = !isLoading,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(
+                onDone = { performLogin() }
+            )
         )
         
         if (error != null) {
@@ -67,22 +101,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             CircularProgressIndicator()
         } else {
             Button(
-                onClick = {
-                    if (email.isNotBlank() && password.isNotBlank()) {
-                        isLoading = true
-                        auth.signInWithEmailAndPassword(email.trim(), password)
-                            .addOnCompleteListener { task ->
-                                isLoading = false
-                                if (task.isSuccessful) {
-                                    onLoginSuccess()
-                                } else {
-                                    error = task.exception?.message
-                                }
-                            }
-                    } else {
-                        error = "Please fill in all fields"
-                    }
-                },
+                onClick = { performLogin() },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Login")

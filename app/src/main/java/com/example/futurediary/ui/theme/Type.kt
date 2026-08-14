@@ -6,16 +6,15 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// We use the built-in Cursive font for that handwritten feel
-// This works offline and requires no extra setup!
-val HandwritingFont = FontFamily.Cursive
+// We use Serif for a classic "journal" feel that is highly readable
+val HandwritingFont = FontFamily.Serif
 
 val Typography = Typography(
     bodyLarge = TextStyle(
         fontFamily = HandwritingFont,
         fontWeight = FontWeight.Normal,
         fontSize = 20.sp,
-        lineHeight = 32.sp,
+        lineHeight = 32.sp, // Explicit line height to match notebook lines
         letterSpacing = 0.5.sp
     ),
     titleLarge = TextStyle(

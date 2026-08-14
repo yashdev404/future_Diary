@@ -7,8 +7,12 @@ import androidx.room.PrimaryKey
 data class DiaryEntry(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
+    val userId: String,
     val date: Long,
     val title: String,
     val content: String,
-    val imageUri: String? = null
+    val imageUri: String? = null,
+    val isDraft: Boolean = false,
+    val isVaultItem: Boolean = false,
+    val unlockDate: Long? = null
 )

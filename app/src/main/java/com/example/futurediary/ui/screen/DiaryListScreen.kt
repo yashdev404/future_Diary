@@ -5,12 +5,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
@@ -25,30 +25,84 @@ import java.util.Locale
 @Composable
 fun DiaryListScreen(
     viewModel: DiaryViewModel,
-    onNavigateToAdd: () -> Unit,
+    onNavigateToAdd: (Long?) -> Unit,
     onNavigateToDetail: (Long) -> Unit,
-    onLogout: () -> Unit
+    onOpenDrawer: () -> Unit,
 ) {
-    val entries by viewModel.entries.collectAsState()
+    val entries by viewModel.entries.collectAsStateWithLifecycle()
+    val drafts by viewModel.drafts.collectAsStateWithLifecycle()
+    var showDatePicker by remember { mutableStateOf(value = false) }
+    val datePickerState = rememberDatePickerState()
+    
+    var entryToDelete by remember { mutableStateOf<DiaryEntry?>(null) }
+
+    if (showDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.setFilterDate(datePickerState.selectedDateMillis)
+                    showDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    viewModel.setFilterDate(null) // Reset filter
+                    showDatePicker = false
+                }) { Text("Clear Filter") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    if (entryToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { entryToDelete = null },
+            title = { Text("Delete Memory?") },
+            text = { Text("Are you sure you want to permanently delete this memory? This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        entryToDelete?.let { viewModel.deleteEntry(it) }
+                        entryToDelete = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { entryToDelete = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Future Diary") },
+                navigationIcon = {
+                    IconButton(onClick = onOpenDrawer) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menu")
+                    }
+                },
                 actions = {
-                    IconButton(onClick = onLogout) {
-                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Logout")
+                    IconButton(onClick = { showDatePicker = true }) {
+                        Icon(Icons.Default.DateRange, contentDescription = "Filter by date")
                     }
                 }
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onNavigateToAdd) {
+            FloatingActionButton(onClick = { onNavigateToAdd(null) }) {
                 Icon(Icons.Default.Add, contentDescription = "Add Entry")
             }
         }
     ) { padding ->
-        if (entries.isEmpty()) {
+        if (entries.isEmpty() && drafts.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -64,13 +118,39 @@ fun DiaryListScreen(
                     .padding(padding)
                     .padding(horizontal = 16.dp),
                 contentPadding = PaddingValues(vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                if (drafts.isNotEmpty()) {
+                    item {
+                        Text(
+                            "Unfinished Memories",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                    }
+                    items(drafts) { draft ->
+                        DiaryEntryItem(
+                            entry = draft,
+                            onClick = { onNavigateToAdd(draft.id) },
+                            onDelete = { entryToDelete = draft },
+                        )
+                    }
+                    if (entries.isNotEmpty()) {
+                        item {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 8.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant
+                            )
+                        }
+                    }
+                }
+
                 items(entries) { entry ->
                     DiaryEntryItem(
                         entry = entry,
                         onClick = { onNavigateToDetail(entry.id) },
-                        onDelete = { viewModel.deleteEntry(entry) }
+                        onDelete = { entryToDelete = entry },
                     )
                 }
             }
@@ -98,17 +178,17 @@ fun DiaryEntryItem(entry: DiaryEntry, onClick: () -> Unit, onDelete: () -> Unit)
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(entry.title, style = MaterialTheme.typography.titleLarge)
                         
-                        val dateString = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-                            .format(Date(entry.date))
+                        val dateFormatter = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
+                        val dateString = dateFormatter.format(Date(entry.date))
                         Text(
                             text = dateString,
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.secondary
+                            color = MaterialTheme.colorScheme.secondary,
                         )
                     }
                     IconButton(onClick = onDelete) {

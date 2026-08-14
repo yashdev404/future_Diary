@@ -24,7 +24,9 @@ object DatabaseModule {
             context,
             DiaryDatabase::class.java,
             "diary_db"
-        ).build()
+        )
+        .addMigrations(DiaryDatabase.MIGRATION_2_3, DiaryDatabase.MIGRATION_3_4)
+        .build()
     }
 
     @Provides
