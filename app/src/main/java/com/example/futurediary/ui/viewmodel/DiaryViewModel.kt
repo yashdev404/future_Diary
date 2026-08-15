@@ -12,11 +12,15 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -35,21 +39,35 @@ class DiaryViewModel @Inject constructor(
     private val auth = FirebaseAuth.getInstance()
     private val _currentUserId = MutableStateFlow(auth.currentUser?.uid)
     private val _filterDate = MutableStateFlow<Long?>(null) // null means show all
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val entries: StateFlow<List<DiaryEntry>> = kotlinx.coroutines.flow.combine(
+    @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
+    val entries: StateFlow<List<DiaryEntry>> = combine(
         _currentUserId,
-        _filterDate
-    ) { userId, filterDate ->
-        userId to filterDate
-    }.flatMapLatest { (userId, filterDate) ->
+        _filterDate,
+        _searchQuery.debounce(300L)
+    ) { userId, filterDate, query ->
+        Triple(userId, filterDate, query)
+    }.flatMapLatest { (userId, filterDate, query) ->
         if (userId != null) {
-            if (filterDate == null) {
+            val baseFlow = if (filterDate == null) {
                 repository.getAllEntries(userId)
             } else {
                 val startOfDay = getStartOfDay(filterDate)
                 val endOfDay = startOfDay + 86400000L
                 repository.getEntriesByDateRange(userId, startOfDay, endOfDay)
+            }
+            
+            baseFlow.map { entriesList ->
+                if (query.isBlank()) {
+                    entriesList
+                } else {
+                    entriesList.filter { 
+                        it.title.contains(query, ignoreCase = true) || 
+                        it.content.contains(query, ignoreCase = true)
+                    }
+                }
             }
         } else {
             flowOf(emptyList())
@@ -106,6 +124,10 @@ class DiaryViewModel @Inject constructor(
 
     fun setFilterDate(timestamp: Long?) {
         _filterDate.value = timestamp
+    }
+
+    fun setSearchQuery(query: String) {
+        _searchQuery.value = query
     }
 
     private fun getStartOfDay(timestamp: Long): Long {
