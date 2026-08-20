@@ -1,7 +1,11 @@
 package com.example.futurediary.ui.screen
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -11,12 +15,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.futurediary.data.model.DiaryEntryWithImages
 import com.example.futurediary.ui.util.drawNotebookLines
 import com.example.futurediary.ui.viewmodel.DiaryViewModel
 import java.text.SimpleDateFormat
@@ -51,7 +58,10 @@ fun DiaryDetailScreen(
             )
         }
     ) { padding ->
-        entry?.let { diaryEntry ->
+        entry?.let { wrap ->
+            val diaryEntry = wrap.entry
+            val images = wrap.images
+            
             Column(
                 modifier = Modifier
                     .padding(padding)
@@ -77,8 +87,10 @@ fun DiaryDetailScreen(
                 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // 2. Framed Image
-                if (diaryEntry.imageUri != null) {
+                // 2. Framed Image Carousel
+                if (images.isNotEmpty()) {
+                    val pagerState = rememberPagerState(pageCount = { images.size })
+                    
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -88,19 +100,42 @@ fun DiaryDetailScreen(
                         border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
                         shadowElevation = 4.dp
                     ) {
-                        Box(modifier = Modifier.padding(8.dp)) { // The "Polaroid" border
-                            Surface(
-                                shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
-                            ) {
+                        Column {
+                            HorizontalPager(
+                                state = pagerState,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(300.dp)
+                            ) { page ->
                                 AsyncImage(
-                                    model = diaryEntry.imageUri,
+                                    model = images[page].imageUri,
                                     contentDescription = null,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(300.dp),
+                                    modifier = Modifier.fillMaxSize(),
                                     contentScale = ContentScale.Crop
                                 )
+                            }
+                            
+                            if (images.size > 1) {
+                                Row(
+                                    Modifier
+                                        .height(24.dp)
+                                        .fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    repeat(images.size) { iteration ->
+                                        val color = if (pagerState.currentPage == iteration) 
+                                            MaterialTheme.colorScheme.primary 
+                                        else 
+                                            MaterialTheme.colorScheme.outlineVariant
+                                        Box(
+                                            modifier = Modifier
+                                                .padding(2.dp)
+                                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                                .background(color)
+                                                .size(8.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -129,7 +164,7 @@ fun DiaryDetailScreen(
             }
         } ?: Box(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentAlignment = androidx.compose.ui.Alignment.Center
+            contentAlignment = Alignment.Center
         ) {
             CircularProgressIndicator()
         }

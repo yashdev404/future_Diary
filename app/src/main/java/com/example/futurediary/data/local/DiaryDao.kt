@@ -5,28 +5,49 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import com.example.futurediary.data.model.DiaryEntry
+import com.example.futurediary.data.model.DiaryEntryWithImages
+import com.example.futurediary.data.model.DiaryImage
+import com.example.futurediary.data.model.UserProfile
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface DiaryDao {
+    @Query("SELECT * FROM user_profiles WHERE userId = :userId")
+    fun getUserProfile(userId: String): Flow<UserProfile?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertUserProfile(profile: UserProfile)
+
+    @Transaction
     @Query("SELECT * FROM diary_entries WHERE userId = :userId AND isDraft = 0 AND isVaultItem = 0 ORDER BY date DESC")
-    fun getAllEntries(userId: String): Flow<List<DiaryEntry>>
+    fun getAllEntries(userId: String): Flow<List<DiaryEntryWithImages>>
 
+    @Transaction
     @Query("SELECT * FROM diary_entries WHERE userId = :userId AND isDraft = 1 ORDER BY date DESC")
-    fun getAllDrafts(userId: String): Flow<List<DiaryEntry>>
+    fun getAllDrafts(userId: String): Flow<List<DiaryEntryWithImages>>
 
+    @Transaction
     @Query("SELECT * FROM diary_entries WHERE userId = :userId AND isVaultItem = 1 ORDER BY date DESC")
-    fun getVaultEntries(userId: String): Flow<List<DiaryEntry>>
+    fun getVaultEntries(userId: String): Flow<List<DiaryEntryWithImages>>
 
+    @Transaction
     @Query("SELECT * FROM diary_entries WHERE id = :id AND userId = :userId")
-    fun getEntryById(id: Long, userId: String): Flow<DiaryEntry?>
+    fun getEntryById(id: Long, userId: String): Flow<DiaryEntryWithImages?>
 
+    @Transaction
     @Query("SELECT * FROM diary_entries WHERE userId = :userId AND isDraft = 0 AND isVaultItem = 0 AND date >= :startDate AND date < :endDate ORDER BY date DESC")
-    fun getEntriesByDateRange(userId: String, startDate: Long, endDate: Long): Flow<List<DiaryEntry>>
+    fun getEntriesByDateRange(userId: String, startDate: Long, endDate: Long): Flow<List<DiaryEntryWithImages>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertEntry(entry: DiaryEntry): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertImages(images: List<DiaryImage>)
+
+    @Query("DELETE FROM diary_images WHERE entryId = :entryId")
+    suspend fun deleteImagesForEntry(entryId: Long)
 
     @Delete
     suspend fun deleteEntry(entry: DiaryEntry)

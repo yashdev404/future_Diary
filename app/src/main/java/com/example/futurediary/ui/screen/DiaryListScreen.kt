@@ -4,18 +4,18 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.futurediary.data.model.DiaryEntry
+import com.example.futurediary.data.model.DiaryEntryWithImages
+import com.example.futurediary.ui.util.journalPage
 import com.example.futurediary.ui.viewmodel.DiaryViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -34,22 +34,29 @@ fun DiaryListScreen(
     var showDatePicker by remember { mutableStateOf(value = false) }
     val datePickerState = rememberDatePickerState()
     
-    var entryToDelete by remember { mutableStateOf<DiaryEntry?>(null) }
+    var entryToDelete by remember { mutableStateOf<DiaryEntryWithImages?>(null) }
+    
+    var isSearchActive by remember { mutableStateOf(value = false) }
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
 
     if (showDatePicker) {
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
-                TextButton(onClick = {
-                    viewModel.setFilterDate(datePickerState.selectedDateMillis)
-                    showDatePicker = false
-                }) { Text("OK") }
+                TextButton(
+                    onClick = {
+                        viewModel.setFilterDate(datePickerState.selectedDateMillis)
+                        showDatePicker = false
+                    },
+                ) { Text("OK") }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    viewModel.setFilterDate(null) // Reset filter
-                    showDatePicker = false
-                }) { Text("Clear Filter") }
+                TextButton(
+                    onClick = {
+                        viewModel.setFilterDate(null) // Reset filter
+                        showDatePicker = false
+                    },
+                ) { Text("Clear Filter") }
             }
         ) {
             DatePicker(state = datePickerState)
@@ -83,13 +90,41 @@ fun DiaryListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Future Diary") },
+                title = { 
+                    if (isSearchActive) {
+                        TextField(
+                            value = searchQuery,
+                            onValueChange = { viewModel.setSearchQuery(it) },
+                            placeholder = { Text("Search memories...") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                disabledContainerColor = Color.Transparent,
+                            )
+                        )
+                    } else {
+                        Text("Future Diary")
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onOpenDrawer) {
                         Icon(Icons.Default.Menu, contentDescription = "Menu")
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = { 
+                            isSearchActive = !isSearchActive 
+                            if (!isSearchActive) viewModel.setSearchQuery("")
+                        },
+                    ) {
+                        Icon(
+                            imageVector = if (isSearchActive) Icons.Default.Close else Icons.Default.Search, 
+                            contentDescription = "Search",
+                        )
+                    }
                     IconButton(onClick = { showDatePicker = true }) {
                         Icon(Icons.Default.DateRange, contentDescription = "Filter by date")
                     }
@@ -106,7 +141,8 @@ fun DiaryListScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .padding(padding)
+                    .journalPage(),
                 contentAlignment = androidx.compose.ui.Alignment.Center
             ) {
                 Text("No memories yet. Start writing!")
@@ -116,8 +152,7 @@ fun DiaryListScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .padding(horizontal = 16.dp),
-                contentPadding = PaddingValues(vertical = 16.dp),
+                    .journalPage(),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 if (drafts.isNotEmpty()) {
@@ -129,12 +164,11 @@ fun DiaryListScreen(
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
                     }
-                    items(drafts) { draft ->
+                    items(drafts) { draftItem ->
                         DiaryEntryItem(
-                            entry = draft,
-                            onClick = { onNavigateToAdd(draft.id) },
-                            onDelete = { entryToDelete = draft },
-                        )
+                            entryWithImages = draftItem,
+                            onClick = { onNavigateToAdd(draftItem.entry.id) }
+                        ) { entryToDelete = draftItem }
                     }
                     if (entries.isNotEmpty()) {
                         item {
@@ -146,12 +180,11 @@ fun DiaryListScreen(
                     }
                 }
 
-                items(entries) { entry ->
+                items(entries) { entryItem ->
                     DiaryEntryItem(
-                        entry = entry,
-                        onClick = { onNavigateToDetail(entry.id) },
-                        onDelete = { entryToDelete = entry },
-                    )
+                        entryWithImages = entryItem,
+                        onClick = { onNavigateToDetail(entryItem.entry.id) }
+                    ) { entryToDelete = entryItem }
                 }
             }
         }
@@ -159,15 +192,22 @@ fun DiaryListScreen(
 }
 
 @Composable
-fun DiaryEntryItem(entry: DiaryEntry, onClick: () -> Unit, onDelete: () -> Unit) {
+fun DiaryEntryItem(
+    entryWithImages: DiaryEntryWithImages, 
+    onClick: () -> Unit, 
+    onDelete: () -> Unit
+) {
+    val entry = entryWithImages.entry
+    val images = entryWithImages.images
+    
     Card(
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick
     ) {
         Column {
-            if (entry.imageUri != null) {
+            if (images.isNotEmpty()) {
                 AsyncImage(
-                    model = entry.imageUri,
+                    model = images.first().imageUri,
                     contentDescription = null,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -202,6 +242,15 @@ fun DiaryEntryItem(entry: DiaryEntry, onClick: () -> Unit, onDelete: () -> Unit)
                     maxLines = 2,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
+                
+                if (images.size > 1) {
+                    Text(
+                        text = "+${images.size - 1} more photos",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
             }
         }
     }

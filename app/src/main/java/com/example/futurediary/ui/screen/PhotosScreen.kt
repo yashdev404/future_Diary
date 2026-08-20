@@ -1,7 +1,6 @@
 package com.example.futurediary.ui.screen
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,7 +16,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
-import com.example.futurediary.data.model.DiaryEntry
+import com.example.futurediary.data.model.DiaryEntryWithImages
+import com.example.futurediary.ui.util.journalPage
 import com.example.futurediary.ui.viewmodel.DiaryViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -34,9 +34,16 @@ fun PhotosScreen(
     
     val dateFormatter = remember { SimpleDateFormat("MMMM dd, yyyy", Locale.getDefault()) }
     
-    // Group entries by formatted date string
-    val groupedEntries = remember(photosEntries) {
-        photosEntries.groupBy { dateFormatter.format(Date(it.date)) }
+    // Create a list of all images with their parent entry ID
+    val allImages = remember(photosEntries) {
+        photosEntries.flatMap { wrap ->
+            wrap.images.map { img -> wrap.entry to img }
+        }
+    }
+    
+    // Group images by formatted date string of their entries
+    val groupedImages = remember(allImages) {
+        allImages.groupBy { (entry, _) -> dateFormatter.format(Date(entry.date)) }
     }
 
     Scaffold(
@@ -51,11 +58,12 @@ fun PhotosScreen(
             )
         }
     ) { padding ->
-        if (photosEntries.isEmpty()) {
+        if (allImages.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .padding(padding)
+                    .journalPage(),
                 contentAlignment = androidx.compose.ui.Alignment.Center
             ) {
                 Text("No photos found in your diary.")
@@ -64,11 +72,11 @@ fun PhotosScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(16.dp),
+                    .padding(padding)
+                    .journalPage(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                groupedEntries.forEach { (date, entries) ->
+                groupedImages.forEach { (date, imagesWithEntries) ->
                     stickyHeader {
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
@@ -83,19 +91,20 @@ fun PhotosScreen(
                         }
                     }
                     
-                    items(entries.chunked(2)) { rowEntries ->
+                    items(imagesWithEntries.chunked(3)) { rowItems ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            rowEntries.forEach { entry ->
+                            rowItems.forEach { (entry, image) ->
                                 PhotoCard(
-                                    entry = entry,
+                                    imageUri = image.imageUri,
                                     onClick = { onEntryClick(entry.id) },
                                     modifier = Modifier.weight(1f)
                                 )
                             }
-                            if (rowEntries.size == 1) {
+                            // Fill empty slots in the grid
+                            repeat(3 - rowItems.size) {
                                 Spacer(modifier = Modifier.weight(1f))
                             }
                         }
@@ -108,7 +117,7 @@ fun PhotosScreen(
 
 @Composable
 fun PhotoCard(
-    entry: DiaryEntry,
+    imageUri: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -119,7 +128,7 @@ fun PhotoCard(
         shape = MaterialTheme.shapes.medium
     ) {
         AsyncImage(
-            model = entry.imageUri,
+            model = imageUri,
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop

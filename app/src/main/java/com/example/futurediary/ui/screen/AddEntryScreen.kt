@@ -1,31 +1,39 @@
 package com.example.futurediary.ui.screen
 
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AddPhotoAlternate
-import androidx.compose.material.icons.filled.CloudDone
-import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.futurediary.ui.viewmodel.DiaryViewModel
+import com.example.futurediary.ui.util.TemplateRegistry
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -38,7 +46,7 @@ fun AddEntryScreen(
 ) {
     var title by rememberSaveable { mutableStateOf("") }
     var content by rememberSaveable { mutableStateOf("") }
-    var selectedImageUri by rememberSaveable { mutableStateOf<android.net.Uri?>(null) }
+    var selectedImages by rememberSaveable { mutableStateOf<List<Uri>>(emptyList()) }
     var isInitialized by rememberSaveable { mutableStateOf(false) }
     var currentId by rememberSaveable { mutableStateOf(if (entryId == -1L) 0L else entryId) }
     var isAutoSaving by remember { mutableStateOf(false) }
@@ -47,11 +55,11 @@ fun AddEntryScreen(
     var unlockDate by rememberSaveable { mutableStateOf<Long?>(null) }
     var showUnlockDatePicker by remember { mutableStateOf(false) }
     
+    var showTemplateMenu by remember { mutableStateOf(false) }
+    
     val contentFocusRequester = remember { FocusRequester() }
-
     val scope = rememberCoroutineScope()
 
-    // ... existing entryToEdit logic ...
     val entryToEdit by if (entryId != -1L) {
         viewModel.getEntryById(entryId).collectAsStateWithLifecycle(initialValue = null)
     } else {
@@ -60,11 +68,12 @@ fun AddEntryScreen(
 
     LaunchedEffect(entryToEdit) {
         if (entryToEdit != null && !isInitialized) {
-            title = entryToEdit!!.title
-            content = entryToEdit!!.content
-            selectedImageUri = entryToEdit!!.imageUri?.let { uri -> android.net.Uri.parse(uri) }
-            isVaultItem = entryToEdit!!.isVaultItem
-            unlockDate = entryToEdit!!.unlockDate
+            val wrap = entryToEdit!!
+            title = wrap.entry.title
+            content = wrap.entry.content
+            selectedImages = wrap.images.map { it.imageUri.toUri() }
+            isVaultItem = wrap.entry.isVaultItem
+            unlockDate = wrap.entry.unlockDate
             isInitialized = true
         }
     }
@@ -85,16 +94,15 @@ fun AddEntryScreen(
     }
 
     // Auto-save logic
-    LaunchedEffect(title, content, selectedImageUri) {
-        // Don't auto-save if everything is empty
-        if (title.isBlank() && content.isBlank() && selectedImageUri == null) return@LaunchedEffect
+    LaunchedEffect(title, content, selectedImages) {
+        if (title.isBlank() && content.isBlank() && selectedImages.isEmpty()) return@LaunchedEffect
         
-        delay(2000) // Wait for 2 seconds of inactivity
+        delay(2000)
         isAutoSaving = true
         val newId = viewModel.saveEntry(
             title = title,
             content = content,
-            imageUri = selectedImageUri?.toString(),
+            images = selectedImages,
             id = currentId,
             isDraft = true
         )
@@ -103,8 +111,10 @@ fun AddEntryScreen(
     }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia(),
-        onResult = { uri -> if (uri != null) selectedImageUri = uri }
+        contract = ActivityResultContracts.PickMultipleVisualMedia(),
+        onResult = { uris -> 
+            selectedImages = (selectedImages + uris).distinct()
+        }
     )
 
     Scaffold(
@@ -117,6 +127,34 @@ fun AddEntryScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = {
+                        photoPickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    }) {
+                        Icon(Icons.Default.CameraAlt, contentDescription = "Add Photo")
+                    }
+
+                    Box {
+                        IconButton(onClick = { showTemplateMenu = true }) {
+                            Icon(Icons.Default.AutoFixHigh, contentDescription = "Use Template")
+                        }
+                        DropdownMenu(
+                            expanded = showTemplateMenu,
+                            onDismissRequest = { showTemplateMenu = false }
+                        ) {
+                            TemplateRegistry.templates.forEach { template ->
+                                DropdownMenuItem(
+                                    text = { Text(template.name) },
+                                    onClick = {
+                                        content = if (content.isBlank()) template.content else "$content\n\n${template.content}"
+                                        showTemplateMenu = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
                     if (isAutoSaving) {
                         Icon(
                             Icons.Default.CloudSync, 
@@ -124,7 +162,7 @@ fun AddEntryScreen(
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(end = 16.dp)
                         )
-                    } else if (title.isNotBlank() || content.isNotBlank() || selectedImageUri != null) {
+                    } else if (title.isNotBlank() || content.isNotBlank() || selectedImages.isNotEmpty()) {
                         Icon(
                             Icons.Default.CloudDone, 
                             contentDescription = "Saved",
@@ -156,48 +194,45 @@ fun AddEntryScreen(
             
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (selectedImageUri != null) {
-                Surface(
+            // Photo Ribbon
+            if (selectedImages.isNotEmpty()) {
+                LazyRow(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 16.dp),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
-                    shadowElevation = 4.dp
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Box(modifier = Modifier.padding(8.dp)) {
-                        Surface(
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
-                        ) {
+                    items(selectedImages.size) { index ->
+                        val uri = selectedImages[index]
+                        Box {
                             AsyncImage(
-                                model = selectedImageUri,
-                                contentDescription = "Selected image",
+                                model = uri,
+                                contentDescription = null,
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(200.dp),
+                                    .size(120.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)),
                                 contentScale = ContentScale.Crop
                             )
+                            IconButton(
+                                onClick = { selectedImages = selectedImages.filter { it != uri } },
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .size(24.dp)
+                                    .background(MaterialTheme.colorScheme.error, CircleShape)
+                                    .padding(4.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Close, 
+                                    contentDescription = "Remove",
+                                    tint = MaterialTheme.colorScheme.onError,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                         }
                     }
                 }
             }
-
-            OutlinedButton(
-                onClick = {
-                    photoPickerLauncher.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                    )
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.AddPhotoAlternate, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(if (selectedImageUri == null) "Add Photo" else "Change Photo")
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
 
             OutlinedTextField(
                 value = content,
@@ -239,7 +274,7 @@ fun AddEntryScreen(
                             viewModel.saveEntry(
                                 title = title,
                                 content = content,
-                                imageUri = selectedImageUri?.toString(),
+                                images = selectedImages,
                                 id = currentId,
                                 isDraft = false,
                                 isVaultItem = isVaultItem,

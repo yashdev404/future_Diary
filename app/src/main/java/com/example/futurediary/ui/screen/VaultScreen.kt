@@ -18,6 +18,8 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.futurediary.data.model.DiaryEntry
+import com.example.futurediary.data.model.DiaryEntryWithImages
+import com.example.futurediary.ui.util.journalPage
 import com.example.futurediary.ui.viewmodel.DiaryViewModel
 import java.util.concurrent.TimeUnit
 
@@ -47,7 +49,8 @@ fun VaultScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .padding(padding)
+                    .journalPage(),
                 contentAlignment = Alignment.Center
             ) {
                 Text("Your vault is empty. Lock a memory for the future!")
@@ -56,14 +59,14 @@ fun VaultScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(16.dp),
+                    .padding(padding)
+                    .journalPage(),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                items(vaultEntries) { entry ->
+                items(vaultEntries) { wrap ->
                     VaultEntryCard(
-                        entry = entry,
-                        onClick = { onEntryClick(entry.id) }
+                        entryWithImages = wrap,
+                        onClick = { onEntryClick(wrap.entry.id) }
                     )
                 }
             }
@@ -72,7 +75,8 @@ fun VaultScreen(
 }
 
 @Composable
-fun VaultEntryCard(entry: DiaryEntry, onClick: () -> Unit) {
+fun VaultEntryCard(entryWithImages: DiaryEntryWithImages, onClick: () -> Unit) {
+    val entry = entryWithImages.entry
     val currentTime = System.currentTimeMillis()
     val isLocked = entry.unlockDate != null && currentTime < entry.unlockDate
     
@@ -122,6 +126,15 @@ fun VaultEntryCard(entry: DiaryEntry, onClick: () -> Unit) {
                     text = entry.content,
                     style = MaterialTheme.typography.bodyMedium
                 )
+                
+                if (entryWithImages.images.isNotEmpty()) {
+                    Text(
+                        text = "${entryWithImages.images.size} photos attached",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
             }
         }
     }

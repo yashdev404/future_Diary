@@ -25,7 +25,12 @@ object DatabaseModule {
             DiaryDatabase::class.java,
             "diary_db"
         )
-        .addMigrations(DiaryDatabase.MIGRATION_2_3, DiaryDatabase.MIGRATION_3_4)
+        .addMigrations(
+            DiaryDatabase.MIGRATION_2_3, 
+            DiaryDatabase.MIGRATION_3_4,
+            DiaryDatabase.MIGRATION_4_5,
+            DiaryDatabase.MIGRATION_5_6
+        )
         .build()
     }
 

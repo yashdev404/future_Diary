@@ -29,12 +29,14 @@ import com.example.futurediary.ui.viewmodel.AuthViewModel
 import com.example.futurediary.ui.viewmodel.DiaryViewModel
 import kotlinx.coroutines.launch
 import com.example.futurediary.ui.screen.PhotosScreen
+import com.example.futurediary.ui.screen.ProfileScreen
 
 sealed class Screen(val route: String, val title: String = "") {
     object Login : Screen("login", "Login")
     object List : Screen("diary_list", "My Journal")
     object Vault : Screen("memory_vault", "Memory Vault")
     object Photos : Screen("photos", "Photos")
+    object Profile : Screen("profile", "Profile")
     object Add : Screen("add_entry?entryId={entryId}", "Add Memory") {
         fun createRoute(entryId: Long? = null) = 
             if (entryId != null) "add_entry?entryId=$entryId" else "add_entry"
@@ -59,7 +61,8 @@ fun DiaryNavHost() {
     // Define which screens should show the drawer
     val showDrawer = currentRoute == Screen.List.route || 
                      currentRoute == Screen.Vault.route || 
-                     currentRoute == Screen.Photos.route
+                     currentRoute == Screen.Photos.route ||
+                     currentRoute == Screen.Profile.route
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -129,9 +132,14 @@ fun DiaryNavHost() {
 
                     NavigationDrawerItem(
                         icon = { Icon(Icons.Default.Person, contentDescription = null) },
-                        label = { Text("Profile") },
-                        selected = false,
-                        onClick = { scope.launch { drawerState.close() } }
+                        label = { Text("Profile & Insights") },
+                        selected = currentRoute == Screen.Profile.route,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            navController.navigate(Screen.Profile.route) {
+                                launchSingleTop = true
+                            }
+                        }
                     )
                     NavigationDrawerItem(
                         icon = { Icon(Icons.Default.Settings, contentDescription = null) },
@@ -208,6 +216,13 @@ fun DiaryNavHost() {
                     onEntryClick = { entryId ->
                         navController.navigate(Screen.Detail.createRoute(entryId))
                     }
+                )
+            }
+
+            composable(Screen.Profile.route) {
+                ProfileScreen(
+                    viewModel = diaryViewModel,
+                    onOpenDrawer = { scope.launch { drawerState.open() } }
                 )
             }
             

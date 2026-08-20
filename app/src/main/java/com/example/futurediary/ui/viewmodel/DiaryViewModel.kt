@@ -3,25 +3,23 @@ package com.example.futurediary.ui.viewmodel
 import android.util.Log
 import android.content.Context
 import android.net.Uri
+import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.futurediary.data.model.DiaryEntry
+import com.example.futurediary.data.model.DiaryEntryWithImages
+import com.example.futurediary.data.model.DiaryImage
+import com.example.futurediary.data.model.ProfileStats
+import com.example.futurediary.data.model.UserProfile
 import com.example.futurediary.data.repository.DiaryRepository
+import com.example.futurediary.ui.util.STOP_WORDS
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -33,7 +31,7 @@ private const val TAG = "DiaryViewModel"
 @HiltViewModel
 class DiaryViewModel @Inject constructor(
     private val repository: DiaryRepository,
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val auth = FirebaseAuth.getInstance()
@@ -42,13 +40,28 @@ class DiaryViewModel @Inject constructor(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val userProfile: StateFlow<UserProfile> = _currentUserId.flatMapLatest { userId ->
+        if (userId != null) {
+            repository.getUserProfile(userId).map { it ?: UserProfile(userId) }
+        } else {
+            flowOf(UserProfile(""))
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = UserProfile("")
+    )
+
     @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
-    val entries: StateFlow<List<DiaryEntry>> = combine(
+    val entries: StateFlow<List<DiaryEntryWithImages>> = combine(
         _currentUserId,
         _filterDate,
-        _searchQuery.debounce(300L)
+        _searchQuery
     ) { userId, filterDate, query ->
         Triple(userId, filterDate, query)
+    }.debounce { (_, _, query) ->
+        if (query.isEmpty()) 0L else 300L
     }.flatMapLatest { (userId, filterDate, query) ->
         if (userId != null) {
             val baseFlow = if (filterDate == null) {
@@ -63,9 +76,9 @@ class DiaryViewModel @Inject constructor(
                 if (query.isBlank()) {
                     entriesList
                 } else {
-                    entriesList.filter { 
-                        it.title.contains(query, ignoreCase = true) || 
-                        it.content.contains(query, ignoreCase = true)
+                    entriesList.filter { item ->
+                        item.entry.title.contains(query, ignoreCase = true) || 
+                        item.entry.content.contains(query, ignoreCase = true)
                     }
                 }
             }
@@ -79,7 +92,7 @@ class DiaryViewModel @Inject constructor(
     )
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val drafts: StateFlow<List<DiaryEntry>> = _currentUserId
+    val drafts: StateFlow<List<DiaryEntryWithImages>> = _currentUserId
         .flatMapLatest { userId ->
             if (userId != null) {
                 repository.getAllDrafts(userId)
@@ -94,7 +107,7 @@ class DiaryViewModel @Inject constructor(
         )
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val vaultEntries: StateFlow<List<DiaryEntry>> = _currentUserId
+    val vaultEntries: StateFlow<List<DiaryEntryWithImages>> = _currentUserId
         .flatMapLatest { userId ->
             if (userId != null) {
                 repository.getVaultEntries(userId)
@@ -109,17 +122,95 @@ class DiaryViewModel @Inject constructor(
         )
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val photosEntries: StateFlow<List<DiaryEntry>> = kotlinx.coroutines.flow.combine(
+    val photosEntries: StateFlow<List<DiaryEntryWithImages>> = combine(
         entries,
         vaultEntries
     ) { entriesList, vaultList ->
-        // Combine both main entries and vault entries, then filter for those with photos
-        (entriesList + vaultList).filter { it.imageUri != null }
-            .sortedByDescending { it.date }
+        (entriesList + vaultList).filter { it.images.isNotEmpty() }
+            .sortedByDescending { it.entry.date }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = emptyList()
+    )
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val stats: StateFlow<ProfileStats> = combine(
+        entries,
+        vaultEntries
+    ) { mainList, vaultList ->
+        val allEntriesWithImages = mainList + vaultList
+        if (allEntriesWithImages.isEmpty()) return@combine ProfileStats()
+
+        val startTime = System.currentTimeMillis()
+
+        // 1. Word Analysis
+        val wordCounts = allEntriesWithImages.asSequence()
+            .flatMap { it.entry.content.split(Regex("\\W+")).asSequence() }
+            .map { it.lowercase() }
+            .filter { it.length > 2 && it !in STOP_WORDS }
+            .groupingBy { it }
+            .eachCount()
+
+        val topWords = wordCounts.toList()
+            .sortedByDescending { it.second }
+            .take(5)
+
+        val totalWords = allEntriesWithImages.sumOf { it.entry.content.split(Regex("\\W+")).size }
+
+        // 2. Activity & Streak Map
+        val activityMap = allEntriesWithImages.groupBy { getStartOfDay(it.entry.date) }
+            .mapValues { it.value.size }
+
+        // 3. Streak Calculation
+        val sortedDates = activityMap.keys.sortedDescending()
+        var currentStreak = 0
+        var longestStreak = 0
+        var tempStreak = 0
+        
+        val today = getStartOfDay(System.currentTimeMillis())
+        val yesterday = today - 86400000L
+
+        // Current Streak
+        if (activityMap.containsKey(today) || activityMap.containsKey(yesterday)) {
+            var checkDate = if (activityMap.containsKey(today)) today else yesterday
+            while (activityMap.containsKey(checkDate)) {
+                currentStreak++
+                checkDate -= 86400000L
+            }
+        }
+
+        // Longest Streak
+        val allDatesAsc = activityMap.keys.sorted()
+        if (allDatesAsc.isNotEmpty()) {
+            var lastDate = allDatesAsc.first()
+            tempStreak = 1
+            longestStreak = 1
+            for (i in 1 until allDatesAsc.size) {
+                if (allDatesAsc.elementAt(i) == lastDate + 86400000L) {
+                    tempStreak++
+                } else {
+                    tempStreak = 1
+                }
+                lastDate = allDatesAsc.elementAt(i)
+                if (tempStreak > longestStreak) longestStreak = tempStreak
+            }
+        }
+
+        Log.d(TAG, "Stats calculated in ${System.currentTimeMillis() - startTime}ms")
+
+        ProfileStats(
+            totalEntries = allEntriesWithImages.size,
+            totalWords = totalWords,
+            currentStreak = currentStreak,
+            longestStreak = longestStreak,
+            topWords = topWords,
+            activityMap = activityMap
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = ProfileStats()
     )
 
     fun setFilterDate(timestamp: Long?) {
@@ -128,6 +219,34 @@ class DiaryViewModel @Inject constructor(
 
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
+    }
+
+    fun updateProfile(name: String, imageUri: Uri?) {
+        val userId = auth.currentUser?.uid ?: return
+        val finalName = if (name.isBlank()) "Journal Owner" else name
+        
+        viewModelScope.launch {
+            Log.d(TAG, "Updating profile for user: $userId, name: $finalName")
+            var permanentImagePath: String? = userProfile.value.profileImageUri
+            
+            if (imageUri != null && imageUri.toString() != permanentImagePath) {
+                Log.d(TAG, "New profile image detected: $imageUri")
+                permanentImagePath = if (imageUri.toString().startsWith("file://") || imageUri.toString().startsWith("/")) {
+                    imageUri.toString()
+                } else {
+                    saveImageToInternalStorage(imageUri)
+                }
+            }
+
+            repository.upsertUserProfile(
+                UserProfile(
+                    userId = userId,
+                    name = finalName,
+                    profileImageUri = permanentImagePath
+                )
+            )
+            Log.d(TAG, "Profile upserted successfully")
+        }
     }
 
     private fun getStartOfDay(timestamp: Long): Long {
@@ -144,7 +263,7 @@ class DiaryViewModel @Inject constructor(
         _currentUserId.value = auth.currentUser?.uid
     }
 
-    fun getEntryById(id: Long) : kotlinx.coroutines.flow.Flow<DiaryEntry?> {
+    fun getEntryById(id: Long) : Flow<DiaryEntryWithImages?> {
         val userId = auth.currentUser?.uid ?: return flowOf(null)
         return repository.getEntryById(id, userId)
     }
@@ -152,7 +271,7 @@ class DiaryViewModel @Inject constructor(
     suspend fun saveEntry(
         title: String,
         content: String,
-        imageUri: String?,
+        images: List<Uri>,
         id: Long = 0,
         isDraft: Boolean = false,
         isVaultItem: Boolean = false,
@@ -160,74 +279,87 @@ class DiaryViewModel @Inject constructor(
     ): Long {
         val userId = auth.currentUser?.uid ?: return 0
         
-        var permanentImagePath: String? = null
-        
-        if (imageUri != null) {
-            permanentImagePath = if (imageUri.startsWith("file://") || imageUri.startsWith("/")) {
-                imageUri
-            } else {
-                saveImageToInternalStorage(Uri.parse(imageUri))
-            }
-        }
-
-        val newEntry = DiaryEntry(
+        val diaryEntry = DiaryEntry(
             id = id,
             userId = userId,
             date = System.currentTimeMillis(),
             title = title,
             content = content,
-            imageUri = permanentImagePath,
+            imageUri = null, // No longer used in main entries
             isDraft = isDraft,
             isVaultItem = isVaultItem,
             unlockDate = unlockDate
         )
-        val newId = repository.insertEntry(newEntry)
-        Log.d(TAG, "Entry saved/updated with id $newId for user $userId (isDraft: $isDraft, isVault: $isVaultItem)")
-        return newId
+        
+        val entryId = repository.insertEntry(diaryEntry)
+        
+        // Handle images
+        val permanentPaths = images.mapNotNull { uri ->
+            if (uri.toString().startsWith("file://") || uri.toString().startsWith("/")) {
+                uri.toString()
+            } else {
+                saveImageToInternalStorage(uri)
+            }
+        }
+        
+        val diaryImages = permanentPaths.map { path ->
+            DiaryImage(entryId = entryId, imageUri = path)
+        }
+        
+        if (diaryImages.isNotEmpty()) {
+            repository.insertImages(diaryImages)
+        }
+        
+        Log.d(TAG, "Entry saved/updated with id $entryId for user $userId (images: ${diaryImages.size})")
+        return entryId
     }
 
     private suspend fun saveImageToInternalStorage(uri: Uri): String? = withContext(Dispatchers.IO) {
         try {
-            val fileName = "diary_${System.currentTimeMillis()}.jpg"
+            val fileName = "diary_${System.currentTimeMillis()}_${(0..1000).random()}.jpg"
             val file = File(context.filesDir, fileName)
             
-            context.contentResolver.openInputStream(uri)?.use { input ->
+            val success = context.contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(file).use { output ->
                     input.copyTo(output)
+                    true
                 }
+            } ?: false
+            
+            if (success) {
+                Log.d(TAG, "Image copied successfully to: ${file.absolutePath}")
+                file.absolutePath
+            } else {
+                null
             }
-            Log.d(TAG, "Image copied successfully to: ${file.absolutePath}")
-            return@withContext file.absolutePath
         } catch (e: Exception) {
             Log.e(TAG, "Failed to copy image", e)
             null
         }
     }
 
-    fun deleteEntry(entry: DiaryEntry) {
+    fun deleteEntry(entryWithImages: DiaryEntryWithImages) {
         viewModelScope.launch {
-            // Delete associated image file if it exists in internal storage
-            entry.imageUri?.let { uriString ->
-                withContext(Dispatchers.IO) {
+            // Delete all associated image files
+            withContext(Dispatchers.IO) {
+                entryWithImages.images.forEach { diaryImage ->
                     try {
-                        val uri = Uri.parse(uriString)
+                        val uri = diaryImage.imageUri.toUri()
                         val file = if (uri.scheme == "file" || uri.scheme == null) {
-                            File(uri.path ?: uriString)
+                            File(uri.path ?: diaryImage.imageUri)
                         } else {
                             null
                         }
 
-                        // Only delete if the file is inside our app's internal files directory
                         if (file != null && file.exists() && file.absolutePath.contains(context.filesDir.absolutePath)) {
-                            val deleted = file.delete()
-                            Log.d(TAG, "Image file deleted: ${file.absolutePath}, success: $deleted")
+                            file.delete()
                         }
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to delete image file: $uriString", e)
+                        Log.e(TAG, "Failed to delete image file: ${diaryImage.imageUri}", e)
                     }
                 }
             }
-            repository.deleteEntry(entry)
+            repository.deleteEntry(entryWithImages.entry)
         }
     }
 }
