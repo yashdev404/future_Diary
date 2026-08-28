@@ -1,7 +1,6 @@
 package com.example.futurediary.ui.util
 
 import android.content.Context
-import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
@@ -16,7 +15,6 @@ object JournalPdfExporter {
 
     fun exportToPdf(context: Context, entries: List<DiaryEntryWithImages>): File? {
         val pdfDocument = PdfDocument()
-        val paint = Paint()
         val titlePaint = Paint().apply {
             typeface = Typeface.DEFAULT_BOLD
             textSize = 24f
@@ -43,30 +41,36 @@ object JournalPdfExporter {
             var yPos = 50f
 
             // Draw Title
-            canvas.drawText(entry.title, 50f, yPos, titlePaint)
+            val title = if (entry.title.length > 40) entry.title.substring(0, 37) + "..." else entry.title
+            canvas.drawText(title, 50f, yPos, titlePaint)
             yPos += 30f
 
             // Draw Date
             val sdf = SimpleDateFormat("MMM dd, yyyy - HH:mm", Locale.getDefault())
             canvas.drawText(sdf.format(Date(entry.date)), 50f, yPos, datePaint)
+            
+            if (entry.mood != null) {
+                canvas.drawText("  Mood: ${entry.mood}", 250f, yPos, datePaint)
+            }
             yPos += 40f
 
-            // Draw Content (Simplified: doesn't handle rich text markup or wrapping perfectly yet)
+            // Draw Content with basic wrapping
             val plainContent = RichTextUtil.stripFormatting(entry.content)
             val lines = plainContent.split("\n")
-            lines.forEach { line ->
-                // Basic text wrapping could be added here
-                canvas.drawText(line, 50f, yPos, bodyPaint)
-                yPos += 20f
-                
-                // If page full, we should technically start a new page
-                if (yPos > pageHeight - 50) {
-                    pdfDocument.finishPage(myPage)
-                    pageNumber++
-                    myPageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
-                    myPage = pdfDocument.startPage(myPageInfo)
-                    canvas = myPage.canvas
-                    yPos = 50f
+            
+            lines.forEach { rawLine ->
+                val wrappedLines = wrapText(rawLine, bodyPaint, (pageWidth - 100).toFloat())
+                wrappedLines.forEach { line ->
+                    if (yPos > pageHeight - 50) {
+                        pdfDocument.finishPage(myPage)
+                        pageNumber++
+                        myPageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                        myPage = pdfDocument.startPage(myPageInfo)
+                        canvas = myPage.canvas
+                        yPos = 50f
+                    }
+                    canvas.drawText(line, 50f, yPos, bodyPaint)
+                    yPos += 20f
                 }
             }
 
@@ -75,7 +79,8 @@ object JournalPdfExporter {
         }
 
         val fileName = "MyJournal_${System.currentTimeMillis()}.pdf"
-        val file = File(context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), fileName)
+        val directory = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
+        val file = File(directory, fileName)
 
         return try {
             pdfDocument.writeTo(FileOutputStream(file))
@@ -85,5 +90,16 @@ object JournalPdfExporter {
             e.printStackTrace()
             null
         }
+    }
+
+    private fun wrapText(text: String, paint: Paint, maxWidth: Float): List<String> {
+        val result = mutableListOf<String>()
+        var start = 0
+        while (start < text.length) {
+            var end = paint.breakText(text, start, text.length, true, maxWidth, null)
+            result.add(text.substring(start, start + end))
+            start += end
+        }
+        return if (result.isEmpty()) listOf("") else result
     }
 }

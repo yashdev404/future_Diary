@@ -56,7 +56,8 @@ fun Modifier.drawNotebookLines(
     
     // Draw horizontal lines
     var currentY = spacingPx
-    while (currentY < size.height) {
+    var safetyCounter = 0
+    while (currentY < size.height && safetyCounter < 500) { // Safety guard: max 500 lines
         drawLine(
             color = lineColor,
             start = Offset(0f, currentY),
@@ -64,5 +65,6 @@ fun Modifier.drawNotebookLines(
             strokeWidth = 1.dp.toPx()
         )
         currentY += spacingPx
+        safetyCounter++
     }
 }

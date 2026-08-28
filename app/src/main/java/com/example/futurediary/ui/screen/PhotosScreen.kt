@@ -98,7 +98,7 @@ fun PhotosScreen(
                         ) {
                             rowItems.forEach { (entry, image) ->
                                 PhotoCard(
-                                    imageUri = image.imageUri,
+                                    imageUri = viewModel.getImagePath(image.fileName) ?: "",
                                     onClick = { onEntryClick(entry.id) },
                                     modifier = Modifier.weight(1f)
                                 )

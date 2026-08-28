@@ -20,12 +20,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.example.futurediary.data.model.DiaryEntryWithImages
+import com.example.futurediary.ui.util.RichTextUtil
 import com.example.futurediary.ui.util.drawNotebookLines
 import com.example.futurediary.ui.viewmodel.DiaryViewModel
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PlayCircle
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -38,6 +46,7 @@ fun DiaryDetailScreen(
     onNavigateBack: () -> Unit,
     onNavigateToEdit: (Long) -> Unit
 ) {
+    val context = LocalContext.current
     val entry by viewModel.getEntryById(entryId).collectAsStateWithLifecycle(initialValue = null)
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
 
@@ -67,27 +76,124 @@ fun DiaryDetailScreen(
                     .padding(padding)
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp) // Outer padding for the "page"
+                    .padding(16.dp)
             ) {
-                // 1. Header (Title & Date) - Outside the lines
-                Text(
-                    text = diaryEntry.title,
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                
-                val dateFormatter = remember { SimpleDateFormat("MMMM dd, yyyy - HH:mm", Locale.getDefault()) }
-                val date = dateFormatter.format(Date(diaryEntry.date))
-                
-                Text(
-                    text = date,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.secondary
-                )
-                
-                Spacer(modifier = Modifier.height(24.dp))
+                // Modern Header Block
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 24.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Date Sidebar (Sleek Modern Style)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        val dayFormat = remember { SimpleDateFormat("dd", Locale.getDefault()) }
+                        val monthYearFormat = remember { SimpleDateFormat("MMM yyyy", Locale.getDefault()) }
+                        Text(
+                            text = dayFormat.format(Date(diaryEntry.date)),
+                            style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = monthYearFormat.format(Date(diaryEntry.date)).uppercase(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
 
-                // 2. Framed Image Carousel
+                    VerticalDivider(
+                        modifier = Modifier
+                            .height(60.dp)
+                            .padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant
+                    )
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = diaryEntry.title,
+                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            val timeFormat = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
+                            Text(
+                                text = timeFormat.format(Date(diaryEntry.date)),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                            if (diaryEntry.mood != null) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = diaryEntry.mood,
+                                    style = MaterialTheme.typography.headlineSmall
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Soundtrack Section
+                if (diaryEntry.songLink != null) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 24.dp),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(diaryEntry.songLink))
+                            context.startActivity(intent)
+                        }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                AsyncImage(
+                                    model = diaryEntry.songThumbnailUrl,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(70.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primary),
+                                    contentScale = ContentScale.Crop
+                                )
+                                Icon(
+                                    Icons.Default.PlayArrow,
+                                    contentDescription = null,
+                                    tint = Color.White.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(30.dp)
+                                )
+                            }
+                            
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 16.dp)
+                            ) {
+                                Text(
+                                    text = diaryEntry.songTitle ?: "Soundtrack",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    text = diaryEntry.songArtist ?: "Unknown Artist",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                )
+                            }
+                            
+                            Icon(
+                                Icons.Default.MusicNote,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+                
                 if (images.isNotEmpty()) {
                     val pagerState = rememberPagerState(pageCount = { images.size })
                     
@@ -108,13 +214,13 @@ fun DiaryDetailScreen(
                                     .height(300.dp)
                             ) { page ->
                                 AsyncImage(
-                                    model = images[page].imageUri,
+                                    model = viewModel.getImagePath(images[page].fileName),
                                     contentDescription = null,
                                     modifier = Modifier.fillMaxSize(),
                                     contentScale = ContentScale.Crop
                                 )
                             }
-                            
+
                             if (images.size > 1) {
                                 Row(
                                     Modifier
@@ -123,14 +229,14 @@ fun DiaryDetailScreen(
                                     horizontalArrangement = Arrangement.Center
                                 ) {
                                     repeat(images.size) { iteration ->
-                                        val color = if (pagerState.currentPage == iteration) 
-                                            MaterialTheme.colorScheme.primary 
-                                        else 
+                                        val color = if (pagerState.currentPage == iteration)
+                                            MaterialTheme.colorScheme.primary
+                                        else
                                             MaterialTheme.colorScheme.outlineVariant
                                         Box(
                                             modifier = Modifier
                                                 .padding(2.dp)
-                                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                                .clip(CircleShape)
                                                 .background(color)
                                                 .size(8.dp)
                                         )
@@ -140,25 +246,27 @@ fun DiaryDetailScreen(
                         }
                     }
                 }
-                
-                // 3. Lined Paper Content
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = screenHeight)
-                        .drawNotebookLines(lineSpacing = 32.dp) // Matches Typography line height
-                        .padding(start = 48.dp, top = 0.dp, end = 16.dp, bottom = 32.dp)
+                        .heightIn(min = 400.dp) // Use a fixed minimum instead of dynamic screen height
+                        .drawNotebookLines(
+                            lineSpacing = 32.dp,
+                            marginOffset = 30.dp
+                        )
+                        .padding(start = 42.dp, top = 0.dp, end = 16.dp, bottom = 32.dp)
                 ) {
-                    // Small spacer to align the first line of text with the first notebook line
-                    // Since line height is 32.sp (almost 32.dp), we push it down slightly
-                    Spacer(modifier = Modifier.height(10.dp)) 
-                    
+                    // Alignment fix: Small spacer to nudge text onto the lines
+                    Spacer(modifier = Modifier.height(26.dp))
+
                     Text(
-                        text = diaryEntry.content,
-                        style = MaterialTheme.typography.bodyLarge,
-                        lineHeight = 32.sp // Ensure exact matching
+                        text = RichTextUtil.parseMarkup(diaryEntry.content),
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            lineHeight = 32.sp // Sync with background lines
+                        )
                     )
-                    
+
                     Spacer(modifier = Modifier.height(100.dp))
                 }
             }

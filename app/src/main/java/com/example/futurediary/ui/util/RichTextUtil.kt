@@ -1,9 +1,11 @@
 package com.example.futurediary.ui.util
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
@@ -11,54 +13,10 @@ import java.util.regex.Pattern
 
 object RichTextUtil {
 
-    private val TAG_PATTERN = Pattern.compile("<(/?[bi]|color=#[0-9A-Fa-f]{6})>")
+    private val TAG_PATTERN = Pattern.compile("<(/?[bi]|color=#[0-9A-Fa-f]{6,8}|/color|font=handwriting|/font)>")
 
     /**
      * Converts markup string (e.g., "Hello <b>World</b>") to AnnotatedString.
-     */
-    fun toAnnotatedString(text: String): AnnotatedString {
-        return buildAnnotatedString {
-            val matcher = TAG_PATTERN.matcher(text)
-            var lastIndex = 0
-            val styleStack = mutableListOf<SpanStyle>()
-
-            while (matcher.find()) {
-                val match = matcher.group()
-                val start = matcher.start()
-                
-                // Add text before the tag
-                append(text.substring(lastIndex, start))
-
-                when {
-                    match == "<b>" -> styleStack.add(SpanStyle(fontWeight = FontWeight.Bold))
-                    match == "<i>" -> styleStack.add(SpanStyle(fontStyle = FontStyle.Italic))
-                    match.startsWith("<color=") -> {
-                        val colorHex = match.substring(7, 14)
-                        val color = Color(android.graphics.Color.parseColor(colorHex))
-                        styleStack.add(SpanStyle(color = color))
-                    }
-                    match == "</b>" || match == "</i>" || match == "</color>" || match.startsWith("</") -> {
-                        if (styleStack.isNotEmpty()) {
-                            val lastStyle = styleStack.removeAt(styleStack.size - 1)
-                            // Note: buildAnnotatedString.withStyle is easier for nesting, 
-                            // but manual pop is needed for arbitrary tag closing.
-                            // For simplicity, we'll just handle basic nesting.
-                        }
-                    }
-                }
-                
-                // This parser is basic and doesn't support complex overlapping tags perfectly,
-                // but for a diary app it works if we use buildAnnotatedString's state properly.
-                // Rewriting to use pushStyle/pop
-                
-                lastIndex = matcher.end()
-            }
-            append(text.substring(lastIndex))
-        }
-    }
-
-    /**
-     * Better version of toAnnotatedString that handles styles correctly.
      */
     fun parseMarkup(text: String): AnnotatedString = buildAnnotatedString {
         val matcher = TAG_PATTERN.matcher(text)
@@ -75,7 +33,7 @@ object RichTextUtil {
             if (tag.startsWith("</")) {
                 // Closing tag
                 val tagName = tag.substring(2, tag.length - 1).split("=")[0]
-                val index = stack.indexOfLast { it.first == tagName }
+                val index = stack.indexOfLast { it.first.startsWith(tagName) }
                 if (index != -1) {
                     val (openedTag, start) = stack.removeAt(index)
                     val end = length
@@ -87,6 +45,7 @@ object RichTextUtil {
                             val hex = openedTag.substringAfter("=")
                             SpanStyle(color = Color(android.graphics.Color.parseColor(hex)))
                         }
+                        openedTag == "font=handwriting" -> SpanStyle(fontFamily = FontFamily.Serif)
                         else -> SpanStyle()
                     }
                     addStyle(style, start, end)
@@ -103,7 +62,7 @@ object RichTextUtil {
         
         // Close remaining tags at the end
         while (stack.isNotEmpty()) {
-            val (openedTag, start) = stack.removeLast()
+            val (openedTag, start) = stack.removeAt(stack.size - 1)
             val end = length
             val style = when {
                 openedTag == "b" -> SpanStyle(fontWeight = FontWeight.Bold)
@@ -112,6 +71,7 @@ object RichTextUtil {
                     val hex = openedTag.substringAfter("=")
                     SpanStyle(color = Color(android.graphics.Color.parseColor(hex)))
                 }
+                openedTag == "font=handwriting" -> SpanStyle(fontFamily = FontFamily.Serif)
                 else -> SpanStyle()
             }
             addStyle(style, start, end)
@@ -126,6 +86,34 @@ object RichTextUtil {
     }
 
     /**
+     * Clears all styles from a specific range in an AnnotatedString.
+     */
+    fun clearStylesInRange(annotatedString: AnnotatedString, start: Int, end: Int): AnnotatedString {
+        val builder = AnnotatedString.Builder(annotatedString.text)
+        annotatedString.spanStyles.forEach { range ->
+            // If the style is completely outside the range, keep it
+            if (range.end <= start || range.start >= end) {
+                builder.addStyle(range.item, range.start, range.end)
+            } else {
+                // Style overlaps with the cleared range.
+                // Keep the part before the range
+                if (range.start < start) {
+                    builder.addStyle(range.item, range.start, start)
+                }
+                // Keep the part after the range
+                if (range.end > end) {
+                    builder.addStyle(range.item, end, range.end)
+                }
+            }
+        }
+        // Also copy paragraph styles and annotations if needed, but for now focus on spanStyles
+        annotatedString.paragraphStyles.forEach { range ->
+             builder.addStyle(range.item, range.start, range.end)
+        }
+        return builder.toAnnotatedString()
+    }
+
+    /**
      * Converts AnnotatedString back to markup.
      * Note: This is complex for arbitrary spans. We'll implement a simplified version
      * that works with the styles we apply (Bold, Italic, Color).
@@ -137,6 +125,7 @@ object RichTextUtil {
         // We'll track which characters have which styles
         val isBold = BooleanArray(text.length)
         val isItalic = BooleanArray(text.length)
+        val isHandwriting = BooleanArray(text.length)
         val colors = arrayOfNulls<String>(text.length)
         
         annotatedString.spanStyles.forEach { range ->
@@ -144,21 +133,27 @@ object RichTextUtil {
                 if (i >= text.length) continue
                 if (range.item.fontWeight == FontWeight.Bold) isBold[i] = true
                 if (range.item.fontStyle == FontStyle.Italic) isItalic[i] = true
+                if (range.item.fontFamily == FontFamily.Serif) isHandwriting[i] = true
                 if (range.item.color != Color.Unspecified) {
-                    colors[i] = String.format("#%06X", (0xFFFFFF and range.item.color.value.toInt()))
+                    colors[i] = String.format("#%08X", range.item.color.toArgb())
                 }
             }
         }
         
         var currentBold = false
         var currentItalic = false
+        var currentHandwriting = false
         var currentColor: String? = null
         
         for (i in text.indices) {
-            // Close tags if necessary
+            // Close tags if necessary (FILO order recommended, but diary use case is simple)
             if (currentColor != null && colors[i] != currentColor) {
                 result.append("</color>")
                 currentColor = null
+            }
+            if (currentHandwriting && !isHandwriting[i]) {
+                result.append("</font>")
+                currentHandwriting = false
             }
             if (currentItalic && !isItalic[i]) {
                 result.append("</i>")
@@ -178,6 +173,10 @@ object RichTextUtil {
                 result.append("<i>")
                 currentItalic = true
             }
+            if (isHandwriting[i] && !currentHandwriting) {
+                result.append("<font=handwriting>")
+                currentHandwriting = true
+            }
             if (colors[i] != null && colors[i] != currentColor) {
                 currentColor = colors[i]
                 result.append("<color=$currentColor>")
@@ -188,6 +187,7 @@ object RichTextUtil {
         
         // Final closes
         if (currentColor != null) result.append("</color>")
+        if (currentHandwriting) result.append("</font>")
         if (currentItalic) result.append("</i>")
         if (currentBold) result.append("</b>")
         

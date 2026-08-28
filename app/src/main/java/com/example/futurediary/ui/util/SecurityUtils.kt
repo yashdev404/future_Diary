@@ -1,10 +1,12 @@
 package com.example.futurediary.ui.util
 
 import android.content.Context
+import android.util.Base64
+import androidx.security.crypto.EncryptedFile
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import java.io.File
 import java.security.SecureRandom
-import java.util.*
 
 object SecurityUtils {
 
@@ -31,13 +33,29 @@ object SecurityUtils {
 
         val storedPassphrase = sharedPreferences.getString(DB_PASSPHRASE_KEY, null)
         return if (storedPassphrase != null) {
-            Base64.getDecoder().decode(storedPassphrase)
+            Base64.decode(storedPassphrase, Base64.DEFAULT)
         } else {
             val newPassphrase = ByteArray(32)
             SecureRandom().nextBytes(newPassphrase)
-            val encoded = Base64.getEncoder().encodeToString(newPassphrase)
+            val encoded = Base64.encodeToString(newPassphrase, Base64.DEFAULT)
             sharedPreferences.edit().putString(DB_PASSPHRASE_KEY, encoded).apply()
             newPassphrase
         }
+    }
+
+    /**
+     * Creates an EncryptedFile object for reading/writing sensitive files.
+     */
+    fun getEncryptedFile(context: Context, file: File): EncryptedFile {
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+
+        return EncryptedFile.Builder(
+            context,
+            file,
+            masterKey,
+            EncryptedFile.FileEncryptionScheme.AES256_GCM_HKDF_4KB
+        ).build()
     }
 }
