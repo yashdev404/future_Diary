@@ -14,5 +14,12 @@ data class DiaryEntry(
     val imageUri: String? = null,
     val isDraft: Boolean = false,
     val isVaultItem: Boolean = false,
-    val unlockDate: Long? = null
+    val unlockDate: Long? = null,
+    val mood: String? = null,
+    val songLink: String? = null,
+    val songTitle: String? = null,
+    val songArtist: String? = null,
+    val songThumbnailUrl: String? = null,
+    val lastModified: Long = System.currentTimeMillis(),
+    val isSynced: Boolean = false
 )

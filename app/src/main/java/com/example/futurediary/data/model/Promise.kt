@@ -10,5 +10,7 @@ data class Promise(
     val userId: String,
     val date: Long,
     val content: String,
-    val isCompleted: Boolean = false
+    val isCompleted: Boolean = false,
+    val lastModified: Long = System.currentTimeMillis(),
+    val isSynced: Boolean = false
 )

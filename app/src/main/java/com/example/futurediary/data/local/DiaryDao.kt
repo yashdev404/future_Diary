@@ -9,6 +9,7 @@ import androidx.room.Transaction
 import com.example.futurediary.data.model.DiaryEntry
 import com.example.futurediary.data.model.DiaryEntryWithImages
 import com.example.futurediary.data.model.DiaryImage
+import com.example.futurediary.data.model.Promise
 import com.example.futurediary.data.model.UserProfile
 import kotlinx.coroutines.flow.Flow
 
@@ -51,4 +52,36 @@ interface DiaryDao {
 
     @Delete
     suspend fun deleteEntry(entry: DiaryEntry)
+
+    // Promises
+    @Query("SELECT * FROM promises WHERE userId = :userId ORDER BY date DESC")
+    fun getAllPromises(userId: String): Flow<List<Promise>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPromise(promise: Promise): Long
+
+    @Query("UPDATE promises SET isCompleted = :isCompleted, lastModified = :lastModified, isSynced = 0 WHERE id = :id")
+    suspend fun updatePromiseStatus(id: Long, isCompleted: Boolean, lastModified: Long)
+
+    @Delete
+    suspend fun deletePromise(promise: Promise)
+
+    // Sync Queries
+    @Query("SELECT * FROM diary_entries WHERE isSynced = 0")
+    suspend fun getUnsyncedEntries(): List<DiaryEntry>
+
+    @Query("UPDATE diary_entries SET isSynced = 1 WHERE id = :id")
+    suspend fun markEntrySynced(id: Long)
+
+    @Query("SELECT * FROM promises WHERE isSynced = 0")
+    suspend fun getUnsyncedPromises(): List<Promise>
+
+    @Query("UPDATE promises SET isSynced = 1 WHERE id = :id")
+    suspend fun markPromiseSynced(id: Long)
+
+    @Query("SELECT * FROM diary_images WHERE remoteUrl IS NULL")
+    suspend fun getUnsyncedImages(): List<DiaryImage>
+
+    @Query("UPDATE diary_images SET remoteUrl = :remoteUrl WHERE id = :id")
+    suspend fun updateImageRemoteUrl(id: Long, remoteUrl: String)
 }

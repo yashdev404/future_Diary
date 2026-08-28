@@ -4,6 +4,7 @@ import com.example.futurediary.data.local.DiaryDao
 import com.example.futurediary.data.model.DiaryEntry
 import com.example.futurediary.data.model.DiaryEntryWithImages
 import com.example.futurediary.data.model.DiaryImage
+import com.example.futurediary.data.model.Promise
 import com.example.futurediary.data.model.UserProfile
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
@@ -35,4 +36,22 @@ class DiaryRepository @Inject constructor(
     suspend fun deleteImagesForEntry(entryId: Long) = diaryDao.deleteImagesForEntry(entryId)
 
     suspend fun deleteEntry(entry: DiaryEntry) = diaryDao.deleteEntry(entry)
+
+    // Promises
+    fun getAllPromises(userId: String): Flow<List<Promise>> = diaryDao.getAllPromises(userId)
+
+    suspend fun insertPromise(promise: Promise) = diaryDao.insertPromise(promise)
+
+    suspend fun updatePromiseStatus(id: Long, isCompleted: Boolean) = 
+        diaryDao.updatePromiseStatus(id, isCompleted, System.currentTimeMillis())
+
+    suspend fun deletePromise(promise: Promise) = diaryDao.deletePromise(promise)
+
+    // Sync operations
+    suspend fun getUnsyncedEntries() = diaryDao.getUnsyncedEntries()
+    suspend fun markEntrySynced(id: Long) = diaryDao.markEntrySynced(id)
+    suspend fun getUnsyncedPromises() = diaryDao.getUnsyncedPromises()
+    suspend fun markPromiseSynced(id: Long) = diaryDao.markPromiseSynced(id)
+    suspend fun getUnsyncedImages() = diaryDao.getUnsyncedImages()
+    suspend fun updateImageRemoteUrl(id: Long, remoteUrl: String) = diaryDao.updateImageRemoteUrl(id, remoteUrl)
 }

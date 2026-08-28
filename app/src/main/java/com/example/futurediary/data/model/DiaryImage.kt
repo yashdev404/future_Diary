@@ -21,5 +21,8 @@ data class DiaryImage(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val entryId: Long,
-    val imageUri: String
+    val fileName: String,
+    val mimeType: String = "image/jpeg",
+    val fileSize: Long = 0,
+    val remoteUrl: String? = null
 )

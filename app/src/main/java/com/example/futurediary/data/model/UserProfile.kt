@@ -8,5 +8,5 @@ data class UserProfile(
     @PrimaryKey
     val userId: String,
     val name: String = "Journal Owner",
-    val profileImageUri: String? = null
+    val profileImageFileName: String? = null
 )
