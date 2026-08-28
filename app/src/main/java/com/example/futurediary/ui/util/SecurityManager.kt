@@ -14,6 +14,14 @@ class SecurityManager(private val context: Context) {
         get() = sharedPreferences.getBoolean("biometric_enabled", false)
         set(value) = sharedPreferences.edit().putBoolean("biometric_enabled", value).apply()
 
+    var isCompanionEnabled: Boolean
+        get() = sharedPreferences.getBoolean("companion_enabled", true)
+        set(value) = sharedPreferences.edit().putBoolean("companion_enabled", value).apply()
+
+    var isCloudSyncEnabled: Boolean
+        get() = sharedPreferences.getBoolean("cloud_sync_enabled", false)
+        set(value) = sharedPreferences.edit().putBoolean("cloud_sync_enabled", value).apply()
+
     fun canUseBiometrics(): Boolean {
         val biometricManager = BiometricManager.from(context)
         return biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL) == BiometricManager.BIOMETRIC_SUCCESS

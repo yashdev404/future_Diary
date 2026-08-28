@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Log
 import com.example.futurediary.data.model.DiaryEntry
 import com.example.futurediary.data.model.Promise
+import com.example.futurediary.ui.util.SecurityManager
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
@@ -24,8 +25,14 @@ class SyncRepository @Inject constructor(
     private val firestore = FirebaseFirestore.getInstance()
     private val storage = FirebaseStorage.getInstance()
     private val auth = FirebaseAuth.getInstance()
+    private val securityManager = SecurityManager(context)
 
     suspend fun sync() {
+        if (!securityManager.isCloudSyncEnabled) {
+            Log.d(TAG, "Sync aborted: Cloud Backup is disabled in settings")
+            return
+        }
+        
         val userId = auth.currentUser?.uid ?: return
         Log.d(TAG, "Starting sync for user: $userId")
 
@@ -68,7 +75,7 @@ class SyncRepository @Inject constructor(
                     .await()
 
                 diaryRepository.markPromiseSynced(promise.id)
-            } catch (e) {
+            } catch (e: Exception) {
                 Log.e(TAG, "Failed to sync promise ${promise.id}", e)
             }
         }

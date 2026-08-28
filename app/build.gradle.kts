@@ -67,13 +67,30 @@ dependencies {
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+    implementation(libs.androidx.hilt.work)
+    
+    // WorkManager
+    implementation(libs.androidx.work.runtime.ktx)
     
     // Coil
     implementation(libs.coil.compose)
 
+    // Jsoup
+    implementation("org.jsoup:jsoup:1.18.1")
+
     // Navigation
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.hilt.navigation.compose)
+
+    // Biometrics
+    implementation("androidx.biometric:biometric-ktx:1.2.0-alpha05")
+
+    // Security & Encryption
+    implementation(libs.sqlcipher)
+    implementation(libs.androidx.security.crypto)
+
+    // Splash Screen
+    implementation(libs.androidx.core.splashscreen)
 
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
