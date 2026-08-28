@@ -16,7 +16,10 @@ import androidx.compose.foundation.text.KeyboardActions
 import com.google.firebase.auth.FirebaseAuth
 
 @Composable
-fun LoginScreen(onLoginSuccess: () -> Unit) {
+fun LoginScreen(
+    onLoginSuccess: () -> Unit,
+    onGuestLogin: () -> Unit
+) {
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
@@ -126,6 +129,17 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                 }
             ) {
                 Text("Don't have an account? Sign Up")
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 32.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedButton(
+                onClick = onGuestLogin,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Continue as Guest")
             }
         }
     }

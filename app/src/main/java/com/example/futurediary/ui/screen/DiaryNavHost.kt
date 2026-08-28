@@ -1,17 +1,9 @@
 package com.example.futurediary.ui.screen
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.Book
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,32 +29,69 @@ sealed class Screen(val route: String, val title: String = "") {
     object Vault : Screen("memory_vault", "Memory Vault")
     object Photos : Screen("photos", "Photos")
     object Profile : Screen("profile", "Profile")
-    object Add : Screen("add_entry?entryId={entryId}", "Add Memory") {
-        fun createRoute(entryId: Long? = null) = 
-            if (entryId != null) "add_entry?entryId=$entryId" else "add_entry"
+    object Settings : Screen("settings", "Settings")
+    object Promises : Screen("promises", "My Promises")
+    object Add : Screen("add_entry?entryId={entryId}&sharedLink={sharedLink}", "Add Memory") {
+        fun createRoute(entryId: Long? = null, sharedLink: String? = null) = 
+            buildString {
+                append("add_entry")
+                val params = mutableListOf<String>()
+                if (entryId != null) params.add("entryId=$entryId")
+                if (sharedLink != null) params.add("sharedLink=$sharedLink")
+                if (params.isNotEmpty()) {
+                    append("?")
+                    append(params.joinToString("&"))
+                }
+            }
     }
     object Detail : Screen("diary_detail/{entryId}", "Memory Detail") {
         fun createRoute(entryId: Long) = "diary_detail/$entryId"
     }
+    object AddPromise : Screen("add_promise", "Make a Promise")
 }
 
 @Composable
-fun DiaryNavHost() {
+fun DiaryNavHost(
+    sharedLink: String? = null,
+    onSharedLinkConsumed: () -> Unit = {}
+) {
     val navController = rememberNavController()
     val diaryViewModel: DiaryViewModel = hiltViewModel()
     val authViewModel: AuthViewModel = hiltViewModel()
     val isUserLoggedIn by authViewModel.isUserLoggedIn.collectAsStateWithLifecycle()
+    val isAuthLoading by authViewModel.isLoading.collectAsStateWithLifecycle()
     
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
+    // Handle shared link
+    androidx.compose.runtime.LaunchedEffect(sharedLink, isUserLoggedIn) {
+        if (sharedLink != null && isUserLoggedIn) {
+            navController.navigate(Screen.Add.createRoute(sharedLink = java.net.URLEncoder.encode(sharedLink, "UTF-8")))
+            onSharedLinkConsumed()
+        }
+    }
+
     // Define which screens should show the drawer
     val showDrawer = currentRoute == Screen.List.route || 
                      currentRoute == Screen.Vault.route || 
                      currentRoute == Screen.Photos.route ||
-                     currentRoute == Screen.Profile.route
+                     currentRoute == Screen.Profile.route ||
+                     currentRoute == Screen.Settings.route ||
+                     currentRoute == Screen.Promises.route
+
+    if (isAuthLoading && !isUserLoggedIn) {
+        // Show loading screen during initial silent sign-in
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = androidx.compose.ui.Alignment.Center
+        ) {
+            CircularProgressIndicator()
+        }
+        return
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -127,6 +156,17 @@ fun DiaryNavHost() {
                             }
                         }
                     )
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Default.Verified, contentDescription = null) },
+                        label = { Text("My Promises") },
+                        selected = currentRoute == Screen.Promises.route,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            navController.navigate(Screen.Promises.route) {
+                                launchSingleTop = true
+                            }
+                        }
+                    )
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp))
 
@@ -144,8 +184,13 @@ fun DiaryNavHost() {
                     NavigationDrawerItem(
                         icon = { Icon(Icons.Default.Settings, contentDescription = null) },
                         label = { Text("Settings") },
-                        selected = false,
-                        onClick = { scope.launch { drawerState.close() } }
+                        selected = currentRoute == Screen.Settings.route,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            navController.navigate(Screen.Settings.route) {
+                                launchSingleTop = true
+                            }
+                        }
                     )
 
                     Spacer(modifier = Modifier.weight(1f))
@@ -160,7 +205,7 @@ fun DiaryNavHost() {
                                 authViewModel.logout()
                                 diaryViewModel.updateCurrentUser()
                                 navController.navigate(Screen.Login.route) {
-                                    popUpTo(0) { inclusive = true }
+                                    popUpTo(navController.graph.id) { inclusive = true }
                                 }
                             }
                         },
@@ -175,13 +220,23 @@ fun DiaryNavHost() {
             startDestination = if (isUserLoggedIn) Screen.List.route else Screen.Login.route,
         ) {
             composable(Screen.Login.route) {
-                LoginScreen {
-                    authViewModel.onLoginSuccess()
-                    diaryViewModel.updateCurrentUser()
-                    navController.navigate(Screen.List.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
+                LoginScreen(
+                    onLoginSuccess = {
+                        authViewModel.onLoginSuccess()
+                        diaryViewModel.updateCurrentUser()
+                        navController.navigate(Screen.List.route) {
+                            popUpTo(Screen.Login.route) { inclusive = true }
+                        }
+                    },
+                    onGuestLogin = {
+                        authViewModel.signInAnonymously {
+                            diaryViewModel.updateCurrentUser()
+                            navController.navigate(Screen.List.route) {
+                                popUpTo(Screen.Login.route) { inclusive = true }
+                            }
+                        }
                     }
-                }
+                )
             }
 
             composable(Screen.List.route) {
@@ -192,6 +247,9 @@ fun DiaryNavHost() {
                     },
                     onNavigateToDetail = { entryId ->
                         navController.navigate(Screen.Detail.createRoute(entryId))
+                    },
+                    onNavigateToAddPromise = {
+                        navController.navigate(Screen.AddPromise.route)
                     },
                     onOpenDrawer = { scope.launch { drawerState.open() } }
                 )
@@ -222,7 +280,34 @@ fun DiaryNavHost() {
             composable(Screen.Profile.route) {
                 ProfileScreen(
                     viewModel = diaryViewModel,
+                    authViewModel = authViewModel,
+                    onOpenDrawer = { scope.launch { drawerState.open() } },
+                    onNavigateToLogin = {
+                        navController.navigate(Screen.Login.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                )
+            }
+
+            composable(Screen.Settings.route) {
+                SettingsScreen(
+                    viewModel = diaryViewModel,
                     onOpenDrawer = { scope.launch { drawerState.open() } }
+                )
+            }
+
+            composable(Screen.Promises.route) {
+                PromisesScreen(
+                    viewModel = diaryViewModel,
+                    onOpenDrawer = { scope.launch { drawerState.open() } }
+                )
+            }
+            
+            composable(Screen.AddPromise.route) {
+                AddPromiseScreen(
+                    viewModel = diaryViewModel,
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
             
@@ -232,14 +317,21 @@ fun DiaryNavHost() {
                     androidx.navigation.navArgument("entryId") {
                         type = androidx.navigation.NavType.LongType
                         defaultValue = -1L
+                    },
+                    androidx.navigation.navArgument("sharedLink") {
+                        type = androidx.navigation.NavType.StringType
+                        nullable = true
+                        defaultValue = null
                     }
                 )
             ) { backStackEntry ->
                 val entryId = backStackEntry.arguments?.getLong("entryId") ?: -1L
+                val receivedLink = backStackEntry.arguments?.getString("sharedLink")
                 AddEntryScreen(
                     viewModel = diaryViewModel,
                     onNavigateBack = { navController.popBackStack() },
-                    entryId = entryId
+                    entryId = entryId,
+                    sharedLink = receivedLink
                 )
             }
             
