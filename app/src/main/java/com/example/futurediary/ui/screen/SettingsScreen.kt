@@ -1,6 +1,7 @@
 package com.example.futurediary.ui.screen
 
 import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -12,12 +13,21 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import java.util.concurrent.TimeUnit
+import com.example.futurediary.data.sync.ReminderWorker
 import com.example.futurediary.ui.util.JournalPdfExporter
 import com.example.futurediary.ui.util.SecurityManager
 import com.example.futurediary.ui.viewmodel.DiaryViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.Manifest
+import android.os.Build
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,7 +43,47 @@ fun SettingsScreen(
     var biometricEnabled by remember { mutableStateOf(securityManager.isBiometricEnabled) }
     var companionEnabled by remember { mutableStateOf(securityManager.isCompanionEnabled) }
     var cloudSyncEnabled by remember { mutableStateOf(securityManager.isCloudSyncEnabled) }
+    var reminderEnabled by remember { mutableStateOf(securityManager.isReminderEnabled) }
+    var reminderTime by remember { mutableStateOf(securityManager.reminderTime) }
     
+    var showTimePicker by remember { mutableStateOf(false) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { isGranted ->
+            if (isGranted) {
+                reminderEnabled = true
+                securityManager.isReminderEnabled = true
+                scheduleReminder(context, reminderTime)
+            } else {
+                Toast.makeText(context, "Notification permission is required for reminders", Toast.LENGTH_SHORT).show()
+            }
+        }
+    )
+    
+    if (showTimePicker) {
+        val (hour, minute) = reminderTime.split(":").map { it.toInt() }
+        val timePickerState = rememberTimePickerState(initialHour = hour, initialMinute = minute)
+        
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val newTime = String.format(Locale.getDefault(), "%02d:%02d", timePickerState.hour, timePickerState.minute)
+                    reminderTime = newTime
+                    securityManager.reminderTime = newTime
+                    if (reminderEnabled) scheduleReminder(context, newTime)
+                    showTimePicker = false
+                }) { Text("Set") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimePicker = false }) { Text("Cancel") }
+            },
+            text = {
+                TimePicker(state = timePickerState)
+            }
+        )
+    }
     var showDateRangePicker by remember { mutableStateOf(false) }
     val dateRangePickerState = rememberDateRangePickerState()
     
@@ -64,6 +114,68 @@ fun SettingsScreen(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(2.dp)
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text("Daily Reminder", style = MaterialTheme.typography.titleMedium)
+                                Text("Get notified to write", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        Switch(
+                            checked = reminderEnabled,
+                            onCheckedChange = { 
+                                if (it) {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    } else {
+                                        reminderEnabled = true
+                                        securityManager.isReminderEnabled = true
+                                        scheduleReminder(context, reminderTime)
+                                    }
+                                } else {
+                                    reminderEnabled = false
+                                    securityManager.isReminderEnabled = false
+                                    cancelReminder(context)
+                                }
+                            }
+                        )
+                    }
+                    
+                    if (reminderEnabled) {
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        Row(
+                            modifier = Modifier
+                                .clickable { showTimePicker = true }
+                                .padding(16.dp)
+                                .fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Reminder Time", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                text = reminderTime,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -147,6 +259,68 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 elevation = CardDefaults.cardElevation(2.dp)
             ) {
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text("Daily Reminder", style = MaterialTheme.typography.titleMedium)
+                                Text("Get notified to write", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        Switch(
+                            checked = reminderEnabled,
+                            onCheckedChange = { 
+                                if (it) {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    } else {
+                                        reminderEnabled = true
+                                        securityManager.isReminderEnabled = true
+                                        scheduleReminder(context, reminderTime)
+                                    }
+                                } else {
+                                    reminderEnabled = false
+                                    securityManager.isReminderEnabled = false
+                                    cancelReminder(context)
+                                }
+                            }
+                        )
+                    }
+                    
+                    if (reminderEnabled) {
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        Row(
+                            modifier = Modifier
+                                .clickable { showTimePicker = true }
+                                .padding(16.dp)
+                                .fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Reminder Time", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                text = reminderTime,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(2.dp)
+            ) {
                 Row(
                     modifier = Modifier
                         .padding(16.dp)
@@ -185,6 +359,68 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 elevation = CardDefaults.cardElevation(2.dp)
             ) {
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text("Daily Reminder", style = MaterialTheme.typography.titleMedium)
+                                Text("Get notified to write", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        Switch(
+                            checked = reminderEnabled,
+                            onCheckedChange = { 
+                                if (it) {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    } else {
+                                        reminderEnabled = true
+                                        securityManager.isReminderEnabled = true
+                                        scheduleReminder(context, reminderTime)
+                                    }
+                                } else {
+                                    reminderEnabled = false
+                                    securityManager.isReminderEnabled = false
+                                    cancelReminder(context)
+                                }
+                            }
+                        )
+                    }
+                    
+                    if (reminderEnabled) {
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        Row(
+                            modifier = Modifier
+                                .clickable { showTimePicker = true }
+                                .padding(16.dp)
+                                .fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Reminder Time", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                text = reminderTime,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(2.dp)
+            ) {
                 Row(
                     modifier = Modifier
                         .padding(16.dp)
@@ -214,6 +450,68 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 elevation = CardDefaults.cardElevation(2.dp)
             ) {
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text("Daily Reminder", style = MaterialTheme.typography.titleMedium)
+                                Text("Get notified to write", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        Switch(
+                            checked = reminderEnabled,
+                            onCheckedChange = { 
+                                if (it) {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    } else {
+                                        reminderEnabled = true
+                                        securityManager.isReminderEnabled = true
+                                        scheduleReminder(context, reminderTime)
+                                    }
+                                } else {
+                                    reminderEnabled = false
+                                    securityManager.isReminderEnabled = false
+                                    cancelReminder(context)
+                                }
+                            }
+                        )
+                    }
+                    
+                    if (reminderEnabled) {
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        Row(
+                            modifier = Modifier
+                                .clickable { showTimePicker = true }
+                                .padding(16.dp)
+                                .fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Reminder Time", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                text = reminderTime,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(2.dp)
+            ) {
                 Row(
                     modifier = Modifier
                         .padding(16.dp)
@@ -236,7 +534,7 @@ fun SettingsScreen(
                             securityManager.isCloudSyncEnabled = it
                             if (it) {
                                 val syncRequest = androidx.work.OneTimeWorkRequestBuilder<com.example.futurediary.data.sync.SyncWorker>().build()
-                                androidx.work.WorkManager.getInstance(context).enqueue(syncRequest)
+                                WorkManager.getInstance(context).enqueue(syncRequest)
                             }
                         }
                     )
@@ -264,6 +562,35 @@ fun SettingsScreen(
             }
         }
     }
+}
+
+private fun scheduleReminder(context: android.content.Context, time: String) {
+    val (hour, minute) = time.split(":").map { it.toInt() }
+    val calendar = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, hour)
+        set(Calendar.MINUTE, minute)
+        set(Calendar.SECOND, 0)
+    }
+
+    if (calendar.timeInMillis < System.currentTimeMillis()) {
+        calendar.add(Calendar.DAY_OF_YEAR, 1)
+    }
+
+    val delay = calendar.timeInMillis - System.currentTimeMillis()
+
+    val reminderRequest = PeriodicWorkRequestBuilder<ReminderWorker>(24, TimeUnit.HOURS)
+        .setInitialDelay(delay, TimeUnit.MILLISECONDS)
+        .build()
+
+    WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+        "daily_reminder",
+        ExistingPeriodicWorkPolicy.REPLACE,
+        reminderRequest
+    )
+}
+
+private fun cancelReminder(context: android.content.Context) {
+    WorkManager.getInstance(context).cancelUniqueWork("daily_reminder")
 }
 
 private fun getFirstDayOfMonth(): Long {

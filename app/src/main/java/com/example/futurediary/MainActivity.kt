@@ -119,8 +119,12 @@ class MainActivity : FragmentActivity() {
     private fun handleIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
             intent.getStringExtra(Intent.EXTRA_TEXT)?.let { text ->
-                if (text.startsWith("http")) {
-                    sharedLink = text
+                // PIPELINE: Extract the first URL found in the text, 
+                // regardless of what music app prefix is there.
+                val urlPattern = Regex("(https?://\\S+)")
+                val match = urlPattern.find(text)
+                if (match != null) {
+                    sharedLink = match.value
                 }
             }
         }

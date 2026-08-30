@@ -22,6 +22,14 @@ class SecurityManager(private val context: Context) {
         get() = sharedPreferences.getBoolean("cloud_sync_enabled", false)
         set(value) = sharedPreferences.edit().putBoolean("cloud_sync_enabled", value).apply()
 
+    var isReminderEnabled: Boolean
+        get() = sharedPreferences.getBoolean("reminder_enabled", false)
+        set(value) = sharedPreferences.edit().putBoolean("reminder_enabled", value).apply()
+
+    var reminderTime: String
+        get() = sharedPreferences.getString("reminder_time", "21:00") ?: "21:00"
+        set(value) = sharedPreferences.edit().putString("reminder_time", value).apply()
+
     fun canUseBiometrics(): Boolean {
         val biometricManager = BiometricManager.from(context)
         return biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL) == BiometricManager.BIOMETRIC_SUCCESS
