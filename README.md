@@ -1,28 +1,47 @@
 # 📔 Future Diary
 
-A modern, personal journaling application for Android built with a focus on privacy and a unique "Physical Book" user experience.
+A premium, privacy-focused personal journaling application for Android. Future Diary combines the nostalgic feel of a physical notebook with modern cloud-sync technology and robust biometric security.
 
-## 🚀 Features (Phase 1 Complete)
-*   **Local Persistence:** Uses **Room Database** to store entries securely on your device.
-*   **Rich Content:** Support for titles, long-form content, and permanent image attachments stored in app-private storage.
-*   **Secure Access:** **Firebase Authentication** integration for private user accounts.
-*   **Adaptive UI:** Built with **Jetpack Compose**, featuring a custom "Vintage Parchment" theme and handwriting-style typography.
-*   **Configuration Resilience:** Implements `rememberSaveable` to handle orientation changes (rotation) without data loss.
-*   **Modern Architecture:** Follows **MVVM** and **Clean Architecture** patterns with **Dagger-Hilt** for dependency injection.
+## 🌟 Key Features
+
+### 🔐 Iron-Clad Privacy
+*   **Biometric Lock**: Protect your memories with Fingerprint or Face ID.
+*   **Encrypted Database**: Uses **SQLCipher** to encrypt your local database with hardware-backed keys (Android Keystore).
+*   **Privacy First**: Cloud sync is entirely optional. Your data stays on your device unless you choose to back it up.
+
+### ☁️ Seamless Cloud Sync
+*   **Hybrid Storage**: Text entries are synced to **Firebase Firestore**, and photos to **Firebase Storage**.
+*   **Anonymous Login**: Start writing immediately without a sign-up. Link an email later to secure your cloud backup.
+*   **Multi-Device**: Access your journal on any device by linking your account.
+
+### 🎵 Your Life's Soundtrack
+*   **Music Integration**: Share songs directly from Spotify or YouTube into your diary.
+*   **Metadata Fetching**: Automatically grabs album art, artists, and titles to create a "Soundtrack of your life."
+
+### 📊 Emotional Insights
+*   **Mood Tracking**: Track how you feel with every entry.
+*   **Soul Portraits**: Monthly "Rewind" style cards that summarize your dominant moods and top written words.
+*   **Soundtrack Summary**: See what music defined your month.
+
+### 🛠️ Advanced Tools
+*   **Memory Vault**: Lock specific entries away until a future date—a message to your future self.
+*   **PDF Export**: Export your memories into beautiful, printable PDF documents.
+*   **Daily Reminders**: Customizable notifications to help you maintain your writing streak.
+*   **Rich Text**: Handwriting-style typography on custom "Vintage Parchment" digital paper.
 
 ## 🛠️ Tech Stack
-*   **Language:** Kotlin
-*   **UI:** Jetpack Compose
-*   **Database:** Room (SQLite)
-*   **Dependency Injection:** Hilt
-*   **Backend:** Firebase Auth
-*   **Image Loading:** Coil
-*   **Navigation:** Compose Navigation with Hilt Integration
+*   **Language**: Kotlin
+*   **UI Framework**: Jetpack Compose (Material 3)
+*   **Architecture**: MVVM + Clean Architecture
+*   **Local DB**: Room + SQLCipher (Encryption)
+*   **DI**: Dagger-Hilt
+*   **Backend**: Firebase (Auth, Firestore, Storage)
+*   **Async**: Kotlin Coroutines + Flow
+*   **Background Tasks**: WorkManager
+*   **Utilities**: Coil (Images), Jsoup (Metadata), iText (PDF Export)
 
-## 🎨 Visual Vision
-Currently transitioning from a standard digital UI to a **Skeuomorphic "Physical Book"** design. 
-*   **Completed:** Custom color palette (Parchment/Leather), Handwriting typography (Cursive), and custom-drawn notebook lines.
-*   **Future:** Page-turning animations, realistic leather textures, and multi-page layouts for tablets.
+## 🎨 Design Philosophy
+Future Diary follows a **Skeuomorphic** design approach. Every screen is designed to look and feel like a physical leather-bound book, featuring custom textures, parchment-colored "paper," and handwriting fonts.
 
 ## 📄 License
-Copyright (C) 2025 Yash Shukla. Licensed under the Apache License, Version 2.0.
+Copyright (C) 2026 Yash Shukla. Licensed under the Apache License, Version 2.0.
