@@ -42,6 +42,7 @@ A premium, privacy-focused personal journaling application for Android. Future D
 
 ## 🎨 Design Philosophy
 Future Diary follows a **Skeuomorphic** design approach. Every screen is designed to look and feel like a physical leather-bound book, featuring custom textures, parchment-colored "paper," and handwriting fonts.
+![App Screenshot](screenshots/your_image_name.png)
 
 ## 📄 License
 Copyright (C) 2026 Yash Shukla. Licensed under the Apache License, Version 2.0.
