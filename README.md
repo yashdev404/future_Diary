@@ -46,5 +46,4 @@ Future Diary follows a **Skeuomorphic** design approach. Every screen is designe
 ## 📄 License
 Copyright (C) 2026 Yash Shukla. Licensed under the Apache License, Version 2.0.
 
-##Insider Pictures
-![App Screenshot](screenshots/your_image_name.png)
+
